@@ -31,19 +31,18 @@ def main():
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
-    # Train with early stopping
+    # Train the model with early stopping
     train(model, dataloader, optimizer, criterion, config.num_epochs, device, patience=10)
 
-    # Save and upload the model checkpoint to wandb
+    # Save the model checkpoint and log to wandb
     model_path = "model_checkpoint.pth"
     torch.save(model.state_dict(), model_path)
 
-    # Use wandb.log_artifact to upload without symlinks
+    # Use wandb.log_artifact to upload the model
     artifact = wandb.Artifact('model_checkpoint', type='model')
     artifact.add_file(model_path)
     wandb.log_artifact(artifact)
-    
-    #
+
 
 if __name__ == "__main__":
     main()
