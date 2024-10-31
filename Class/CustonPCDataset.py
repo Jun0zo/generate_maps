@@ -55,7 +55,6 @@ class CustomPointCloudDataset(Dataset):
     def __getitem__(self, idx):
         # 포인트 클라우드 파일 경로 설정 및 데이터 로드
         point_cloud_path = os.path.join(self.point_cloud_dir, self.point_cloud_files[idx])
-        print('path :', point_cloud_path)
         point_cloud = self.load_point_cloud(point_cloud_path)
         
         # GPS/IMU 파일 경로 설정 및 데이터 로드
@@ -63,7 +62,6 @@ class CustomPointCloudDataset(Dataset):
         imu_gps_seq = self.load_imu_gps(imu_gps_path)  # 각 항목이 30 타임스텝이라고 가정
 
         # 텐서 변환
-        print('point_cloud:', point_cloud.shape)
         point_cloud_tensor = torch.tensor(point_cloud, dtype=torch.float32).permute(0, 1)  # (4, num_points)
         imu_gps_tensor = torch.tensor(imu_gps_seq, dtype=torch.float32)  # (30, 6)
         

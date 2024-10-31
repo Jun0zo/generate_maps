@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from tqdm import tqdm
+import wandb
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # PointNet Backbone for Point Cloud Feature Extraction
 class PointNetBackbone(nn.Module):
@@ -31,7 +34,6 @@ class RNNBackbone(nn.Module):
         self.fc = nn.Linear(hidden_size, output_size)
         
     def forward(self, x):
-        print('x:', x.shape)
         _, (hn, _) = self.rnn(x)
         x = self.fc(hn[-1])
         return x  # output_size-dimensional feature vector for GPS/IMU
@@ -74,45 +76,21 @@ class GenerationModel(nn.Module):
         
         return generated_features  # Output feature vector
 
-# Training function
-def train(model, dataloader, optimizer, criterion, num_epochs):
+
+
+def train(model, dataloader, optimizer, criterion, num_epochs, device, patience=10):
+    model.to(device)
     model.train()
+
+    best_loss = float('inf')
+    epochs_no_improve = 0  # Early stopping patience counter
+    best_model_wts = None  # To save the best model weights
+
     for epoch in range(num_epochs):
         epoch_loss = 0
         with tqdm(dataloader, unit="batch") as tepoch:
             tepoch.set_description(f"Epoch {epoch + 1}/{num_epochs}")
             for batch_idx, (point_cloud, imu_gps_seq) in enumerate(tepoch):
-                # Move data to the appropriate device
-                point_cloud, imu_gps_seq = point_cloud.to(device), imu_gps_seq.to(device)
-                
-                
-                # Forward pass
-                output = model(point_cloud, imu_gps_seq)
-                
-                # Compute loss
-                loss = criterion(output, output)  # Placeholder target for example purposes
-                epoch_loss += loss.item()
-                
-                # Backward and optimize
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                
-                # Update tqdm progress bar
-                tepoch.set_postfix(loss=loss.item())
-
-            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss / len(dataloader):.4f}")
-
-
-def train(model, dataloader, optimizer, criterion, num_epochs, device):
-    model.to(device)  # Move model to device
-    model.train()  # Set model to training mode
-    for epoch in range(num_epochs):
-        epoch_loss = 0
-        with tqdm(dataloader, unit="batch") as tepoch:
-            tepoch.set_description(f"Epoch {epoch + 1}/{num_epochs}")
-            for batch_idx, (point_cloud, imu_gps_seq) in enumerate(tepoch):
-                # Move data to the appropriate device
                 point_cloud, imu_gps_seq = point_cloud.to(device), imu_gps_seq.to(device)
                 
                 # Forward pass
@@ -130,11 +108,34 @@ def train(model, dataloader, optimizer, criterion, num_epochs, device):
                 loss.backward()
                 optimizer.step()
                 
+                # Log loss to wandb for each batch
+                print(epoch, batch_idx, loss.item())
+                wandb.log({"Batch Loss": loss.item()})
+                
                 # Update tqdm progress bar
                 tepoch.set_postfix(loss=loss.item())
 
-            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {epoch_loss / len(dataloader):.4f}")
+            # Calculate average epoch loss
+            avg_epoch_loss = epoch_loss / len(dataloader)
+            wandb.log({"Epoch Loss": avg_epoch_loss})
+            print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {avg_epoch_loss:.4f}")
 
+            # Check for early stopping
+            if avg_epoch_loss < best_loss:
+                best_loss = avg_epoch_loss
+                epochs_no_improve = 0
+                best_model_wts = model.state_dict()  # Save best model weights
+            else:
+                epochs_no_improve += 1
+
+            # Early stopping condition
+            if epochs_no_improve >= patience:
+                print(f"Early stopping at epoch {epoch + 1} with best loss {best_loss:.4f}")
+                break
+
+    # Load best model weights before returning
+    if best_model_wts is not None:
+        model.load_state_dict(best_model_wts)
 
 # Example usage
 def main():
